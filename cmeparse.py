@@ -2,6 +2,8 @@
 import os
 import datetime
 import argparse
+import logging
+from logging.handlers import RotatingFileHandler
 from sqlalchemy import create_engine, MetaData, Table, Column, Float, String, DateTime, Integer, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -10,7 +12,25 @@ import pandas as pd
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-u','--uri',help='sqlalchemy db engine uri',default='sqlite:///cme.sqlite')
+parser.add_argument('-f','--filename',help='only parse one filename')
+parser.add_argument('-l','--log',help='log name')
+parser.add_argument('-v','--level',help='log level',default='INFO')
 Base = declarative_base()
+
+def create_logger(filename,level):
+    level = getattr(logging,level.upper())
+    logger = logging.getLogger(__name__)
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+    sh = logging.StreamHandler()
+    sh.setFormatter(formatter)
+    sh.setLevel(level)
+    logger.addHandler(sh)
+    if filename:
+        fh = RotatingFileHandler(filename,'a',2*1024**2,2)
+        fh.setFormatter(formatter)
+        fh.setLevel(level)
+        logger.addHandler(fh)
+    return logger 
 
 class BaseSecurity:
     def __str__(self):
@@ -128,18 +148,41 @@ def insert_to_db(df):
     inst = pd.DataFrame([i.to_dict() for i in set(inst)])
     del df['underlying']
     del df['instrument']
-    und.to_sql('underlying',engine,if_exists='append',index=False)
-    inst.to_sql('instrument',engine,if_exists='append',index=False)
-    df.to_sql('market_data',engine,if_exists='append',index=False)
+    if df is not None and len(df):
+        df.to_sql('market_data',engine,if_exists='append',index=False)
+    if inst is not None and len(inst):
+        inst.to_sql('instrument',engine,if_exists='append',index=False)
+    if und is not None and len(und):
+        und.to_sql('underlying',engine,if_exists='append',index=False)
 
-def main(base='settle'):
+def parse_one(filename,logger=None):
+    try:
+        df = parse_file(filename,'')
+        insert_to_db(df)
+    except Exception as e:
+        if logger:
+            logger.error(str(e))
+        raise e
+
+def parse_folder(base='settle',logger=None):
     for filename in os.listdir(base):
         if filename.endswith('s.xml'):
-            df = parse_file(filename)
-            insert_to_db(df)
+            try:
+                df = parse_file(filename)
+                insert_to_db(df)
+            except Exception as e:
+                if logger:
+                    logger.error(str(e))
 
 if __name__=='__main__':
     args = parser.parse_args()
     engine = create_engine(args.uri)
+    Session = sessionmaker(engine=engine)
+    session = Session()
     Base.metadata.create_all(engine)
-    main()
+    log = create_logger(args.log,args.level)
+    log.info('starting')
+    if args.filename:
+        parse_one(args.filename,log)
+    else:
+        parse_folder(logger=log)
