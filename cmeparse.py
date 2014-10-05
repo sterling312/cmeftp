@@ -15,6 +15,7 @@ parser.add_argument('-u','--uri',help='sqlalchemy db engine uri',default='sqlite
 parser.add_argument('-f','--filename',help='only parse one filename')
 parser.add_argument('-l','--log',help='log name')
 parser.add_argument('-v','--level',help='log level',default='INFO')
+parser.add_argument('-d','--date',help='date for the xml file')
 Base = declarative_base()
 
 def create_logger(filename,level):
@@ -164,15 +165,16 @@ def parse_one(filename,logger=None):
             logger.error(str(e))
         raise e
 
-def parse_folder(base='settle',logger=None):
+def parse_folder(base='settle',date=None,logger=None):
     for filename in os.listdir(base):
         if filename.endswith('s.xml'):
-            try:
-                df = parse_file(filename)
-                insert_to_db(df)
-            except Exception as e:
-                if logger:
-                    logger.error(str(e))
+            if not date or date in filename:
+                try:
+                    df = parse_file(filename)
+                    insert_to_db(df)
+                except Exception as e:
+                    if logger:
+                        logger.error(str(e))
 
 if __name__=='__main__':
     args = parser.parse_args()
@@ -185,4 +187,4 @@ if __name__=='__main__':
     if args.filename:
         parse_one(args.filename,log)
     else:
-        parse_folder(logger=log)
+        parse_folder(date=args.date,logger=log)
