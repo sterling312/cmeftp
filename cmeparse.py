@@ -179,7 +179,7 @@ def parse_folder(base='settle',date=None,logger=None):
 if __name__=='__main__':
     args = parser.parse_args()
     engine = create_engine(args.uri)
-    Session = sessionmaker(engine=engine)
+    Session = sessionmaker(bind=engine)
     session = Session()
     Base.metadata.create_all(engine)
     log = create_logger(args.log,args.level)
