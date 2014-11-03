@@ -143,10 +143,6 @@ def parse_file(filename, path='settle'):
     return df
 
 def insert_to_db(df, tablename='market_data'):
-    und = df.underlying.dropna()
-    und = pd.DataFrame([i.to_dict() for i in set(und)])
-    inst = df.instrument.dropna()
-    inst = pd.DataFrame([i.to_dict() for i in set(inst)])
     del df['underlying']
     del df['instrument']
     if df is not None and len(df):
@@ -176,8 +172,8 @@ def parse_folder(base='settle', date=None, logger=None):
                         tablename = '_'.join(fn.split('.')[:4:2])
                     else:
                         tablename = fn.split('.')[0]
-                    df = parse_file(filename, tablename)
-                    insert_to_db(df)
+                    df = parse_file(filename, base)
+                    insert_to_db(df, tablename)
                 except Exception as e:
                     if logger:
                         logger.error(str(e))
