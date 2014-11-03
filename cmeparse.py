@@ -69,38 +69,38 @@ class BaseSecurity:
 
 class Underlying(BaseSecurity,Base):
     __tablename__ = 'underlying'
-    exch = Column(String(10),primary_key=True,nullable=False)
-    symbol = Column(String(10),primary_key=True,nullable=False)
-    expiry = Column(Integer,primary_key=True,nullable=False,default=0)
-    inst_type = Column(String(1),primary_key=True)
+    exch = Column(String(10), primary_key=True, nullable=False)
+    symbol = Column(String(10), primary_key=True, nullable=False)
+    expiry = Column(Integer, primary_key=True, nullable=False, default=0)
+    inst_type = Column(String(1), primary_key=True)
     @classmethod
-    def from_xml(cls,Exch,ID,MMY=None,SecTyp=None,**kwargs):
+    def from_xml(cls, Exch, ID, MMY=None, SecTyp=None, **kwargs):
         if MMY:
             MMY = int(MMY) if len(MMY)==8 else int(MMY+'01')
         if SecTyp:
             SecTyp = 'F' if SecTyp=='FUT' else 'S'
-        return cls(exch=Exch,symbol=ID,expiry=MMY,inst_type=SecTyp)
+        return cls(exch=Exch, symbol=ID, expiry=MMY, inst_type=SecTyp)
 
     def to_tuple(self):
-        return self.exch,self.symbol,self.expiry,self.inst_type
+        return self.exch, self.symbol, self.expiry, self.inst_type
 
     def __repr__(self):
         return '<Underlying: {}>'.format(self) 
 
 class Instrument(BaseSecurity,Base):
     __tablename__ = 'instrument'
-    exch = Column(String(10),primary_key=True,nullable=False)
-    symbol = Column(String(10),primary_key=True,nullable=False)
-    expiry = Column(Integer,primary_key=True,nullable=False,default=0)
-    maturity = Column(Integer,primary_key=True,nullable=False,default=0)
-    inst_type = Column(String(1),primary_key=True)
-    strike = Column(Float,primary_key=True)
+    exch = Column(String(10), primary_key=True, nullable=False)
+    symbol = Column(String(10), primary_key=True, nullable=False)
+    expiry = Column(Integer, primary_key=True, nullable=False, default=0)
+    maturity = Column(Integer, primary_key=True, nullable=False, default=0)
+    inst_type = Column(String(1), primary_key=True)
+    strike = Column(Float, primary_key=True)
     @classmethod
-    def from_xml(cls,Exch,Sym,MMY=None,MatDt=None,PutCall=None,StrkPx=None,Undly=None,**kwargs):
+    def from_xml(cls, Exch, Sym, MMY=None, MatDt=None, PutCall=None, StrkPx=None, Undly=None, **kwargs):
         if MMY:
             MMY = int(MMY) if len(MMY)==8 else int(MMY+'01')
         if MatDt:
-            MatDt = datetime.datetime.strptime(MatDt,'%Y-%m-%d').strftime('%Y%m%d')
+            MatDt = datetime.datetime.strptime(MatDt, '%Y-%m-%d').strftime('%Y%m%d')
             MatDt = int(MatDt)
         if StrkPx:
             StrkPx = float(StrkPx)
@@ -109,7 +109,7 @@ class Instrument(BaseSecurity,Base):
         else:
             PutCall = 'C' if 1 else 'P'
         StrkPx = float(StrkPx) if StrkPx else 0.
-        inst = cls(exch=Exch,symbol=Sym,expiry=MMY,maturity=MatDt,inst_type=PutCall,strike=StrkPx)
+        inst = cls(exch=Exch, symbol=Sym, expiry=MMY, maturity=MatDt, inst_type=PutCall, strike=StrkPx)
         inst._underlying = Undly
         return inst
 
@@ -118,22 +118,22 @@ class Instrument(BaseSecurity,Base):
         return self._underlying
 
     def to_tuple(self):
-        return self.exch,self.symbol,self.expiry,self.maturity,self.inst_type,self.strike
+        return self.exch, self.symbol, self.expiry, self.maturity, self.inst_type, self.strike
 
     def __repr__(self):
         return '<Instrument: {}>'.format(self) 
 
-def parse_file(filename,path='settle'):
-    with open(os.path.join(path,filename),'rb') as fh:
+def parse_file(filename, path='settle'):
+    with open(os.path.join(path, filename), 'rb') as fh:
         obj = objectify.XML(fh.read())
     data = obj.Batch.MktDataFull
     arr = []
     for i in data:
         inst = dict(i.Instrmt.attrib)
-        und = Underlying.from_xml(**i.Undly.attrib) if hasattr(i,'Undly') else None
-        inst['instrument'] = Instrument.from_xml(Undly=und,**inst)
+        und = Underlying.from_xml(**i.Undly.attrib) if hasattr(i, 'Undly') else None
+        inst['instrument'] = Instrument.from_xml(Undly=und, **inst)
         inst['underlying'] = und
-        inst['date'] = datetime.datetime.strptime(i.values()[0],'%Y-%m-%d')
+        inst['date'] = datetime.datetime.strptime(i.values()[0], '%Y-%m-%d')
         for full in i.Full:
             full = dict(full.attrib)
             full.update(inst)
@@ -142,7 +142,7 @@ def parse_file(filename,path='settle'):
     df.index = df['date']
     return df
 
-def insert_to_db(df):
+def insert_to_db(df, tablename='market_data'):
     und = df.underlying.dropna()
     und = pd.DataFrame([i.to_dict() for i in set(und)])
     inst = df.instrument.dropna()
@@ -150,27 +150,33 @@ def insert_to_db(df):
     del df['underlying']
     del df['instrument']
     if df is not None and len(df):
-        df.to_sql('market_data',engine,if_exists='append',index=False)
-    if inst is not None and len(inst):
-        inst.to_sql('instrument',engine,if_exists='append',index=False)
-    if und is not None and len(und):
-        und.to_sql('underlying',engine,if_exists='append',index=False)
+        df.to_sql(tablename, engine, if_exists='append', index=False)
 
-def parse_one(filename,logger=None):
+def parse_one(filename, logger=None):
     try:
         df = parse_file(filename,'')
-        insert_to_db(df)
+        path, fn = os.path.split(filename)
+        if 'fwd' in fn:
+            tablename = '_'.join(fn.split('.')[:4:2])
+        else:
+            tablename = fn.split('.')[0]
+        insert_to_db(df, tablename)
     except Exception as e:
         if logger:
             logger.error(str(e))
         raise e
 
-def parse_folder(base='settle',date=None,logger=None):
+def parse_folder(base='settle', date=None, logger=None):
     for filename in os.listdir(base):
         if filename.endswith('s.xml'):
             if not date or date in filename:
                 try:
-                    df = parse_file(filename)
+                    path, fn = os.path.split(filename)
+                    if 'fwd' in fn:
+                        tablename = '_'.join(fn.split('.')[:4:2])
+                    else:
+                        tablename = fn.split('.')[0]
+                    df = parse_file(filename, tablename)
                     insert_to_db(df)
                 except Exception as e:
                     if logger:
