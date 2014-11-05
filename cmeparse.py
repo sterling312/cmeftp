@@ -10,12 +10,14 @@ from sqlalchemy.orm import sessionmaker
 from lxml import objectify
 import pandas as pd
 
+today = datetime.datetime.today().strftime('%Y%m%d')
+
 parser = argparse.ArgumentParser()
 parser.add_argument('-u','--uri',help='sqlalchemy db engine uri',default='sqlite:///cme.sqlite')
 parser.add_argument('-f','--filename',help='only parse one filename')
 parser.add_argument('-l','--log',help='log name')
 parser.add_argument('-v','--level',help='log level',default='INFO')
-parser.add_argument('-d','--date',help='date for the xml file')
+parser.add_argument('-d','--date',help='date for the xml file',default=today)
 Base = declarative_base()
 
 def create_logger(filename,level):
